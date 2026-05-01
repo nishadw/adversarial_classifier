@@ -141,5 +141,4 @@ python -m adversarial_classifier.compare_models \
 - **scikit-learn**: AUC score computation
 - **Matplotlib**: Training visualization
 - **Optax**: Optimization library for JAX
-- **ONNX**: Model export format (planned for future releases)
 - **torchvision**: Data loading (CIFAR-10)
