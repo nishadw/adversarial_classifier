@@ -1,0 +1,155 @@
+Metadata-Version: 2.4
+Name: adversarial-classifier
+Version: 0.1.0
+Summary: CIFAR-10 image classification with standard and adversarial training
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.2.0
+Requires-Dist: torchvision>=0.17.0
+Requires-Dist: tqdm>=4.66.0
+
+# adversarial_classifier
+
+Train and compare three CIFAR-10 classifiers using **JAX/Flax** for 50 epochs:
+- `standard` – Standard CNN trained on clean data
+- `whitebox_pgd_trained` – White-box PGD adversarial training
+- `blackbox_pgd_trained` – Transfer-based (black-box) PGD adversarial training
+
+Generates **per-epoch metrics** (train/val/test accuracy, loss, AUC) and **plots** for each model.
+
+## Quick Start
+
+```bash
+# Setup
+cd /Users/nishad/1_Programming_Workspaces/adversarial_classifier
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e .
+
+# Run all training & comparison (50 epochs, then plots & final comparison)
+chmod +x run_all.sh
+./run_all.sh
+```
+
+**Outputs:**
+- `artifacts/standard.pt`, `artifacts/whitebox_pgd.pt`, `artifacts/blackbox_pgd.pt` – Trained models
+- `artifacts/*_history.csv` – Per-epoch metrics (epoch, train_loss, train_acc, val_loss, val_acc, val_auc, test_loss, test_acc, test_auc)
+- `artifacts/*_chart.png` – Training curves (train/val/test accuracy & loss)
+- `artifacts/comparison_final.csv` – Final robustness evaluation
+
+## Environment Variables
+
+```bash
+EPOCHS=50      # Number of training epochs (default: 50)
+BATCH=128      # Batch size (default: 128)
+LR=0.1         # Learning rate (default: 0.1)
+NUM_WORKERS=0  # Data loader workers (default: 0)
+ARCHIVE=/path/to/cifar-10-python.tar  # CIFAR-10 archive
+```
+
+Example:
+```bash
+EPOCHS=50 BATCH=128 LR=0.1 ./run_all.sh
+```
+
+## Manual Training (Step by Step)
+
+### 1. Train standard model
+
+```bash
+python -m adversarial_classifier.train \
+  --mode standard \
+  --epochs 50 \
+  --batch-size 128 \
+  --lr 0.1 \
+  --archive-path /Users/nishad/Downloads/cifar-100-python.tar \
+  --download-if-missing \
+  --output ./artifacts/standard.pt
+```
+
+### 2. Train white-box PGD model
+
+```bash
+python -m adversarial_classifier.train \
+  --mode whitebox_pgd \
+  --epochs 50 \
+  --batch-size 128 \
+  --lr 0.1 \
+  --pgd-steps 7 \
+  --archive-path /Users/nishad/Downloads/cifar-100-python.tar \
+  --download-if-missing \
+  --output ./artifacts/whitebox_pgd.pt
+```
+
+### 3. Train black-box PGD model
+
+```bash
+python -m adversarial_classifier.train \
+  --mode blackbox_pgd \
+  --surrogate-checkpoint ./artifacts/standard.pt \
+  --epochs 50 \
+  --batch-size 128 \
+  --lr 0.1 \
+  --pgd-steps 7 \
+  --archive-path /Users/nishad/Downloads/cifar-100-python.tar \
+  --download-if-missing \
+  --output ./artifacts/blackbox_pgd.pt
+```
+
+### 4. Plot training results
+
+```bash
+python -m adversarial_classifier.plot_results \
+  ./artifacts/standard_history.csv \
+  ./artifacts/whitebox_pgd_history.csv \
+  ./artifacts/blackbox_pgd_history.csv \
+  --output-dir ./artifacts
+```
+
+### 5. Compare models
+
+```bash
+python -m adversarial_classifier.compare_models \
+  --standard-ckpt ./artifacts/standard.pt \
+  --whitebox-ckpt ./artifacts/whitebox_pgd.pt \
+  --blackbox-ckpt ./artifacts/blackbox_pgd.pt \
+  --pgd-steps 20 \
+  --output-csv ./artifacts/comparison_final.csv
+```
+
+## Outputs Explained
+
+**Per-Epoch Metrics CSV** (`*_history.csv`):
+- `epoch`: Training epoch
+- `train_loss`, `train_acc`: Training loss & accuracy
+- `val_loss`, `val_acc`, `val_auc`: Validation metrics
+- `test_loss`, `test_acc`, `test_auc`: Test metrics
+
+**Training Charts** (`*_chart.png`):
+- Left subplot: Accuracy curves (train/val/test)
+- Right subplot: Loss curves (train/val/test)
+
+**Final Comparison** (`comparison_final.csv`):
+- `test_loss`, `test_acc`, `test_auc`: Model performance on clean test set
+- `whitebox_pgd_acc`: Robustness to attacks from the model itself
+- `transfer_pgd_acc_from_simple`: Robustness to transfer attacks from standard model
+
+## Architecture
+
+- **Input**: CIFAR-10 images (32×32, 3 channels)
+- **Conv blocks**: 128→256→512 channels with GroupNorm
+- **Pooling**: Max pooling (stride 2) after each block → 4×4×512
+- **Head**: Global average pooling → Dense(512) → Dense(256) → Dense(10)
+- **Target accuracy**: >90% on clean test set
+
+## Tech Stack
+
+- **JAX**: High-performance array operations
+- **Flax**: Neural networks on JAX
+- **Optax**: Optimization (SGD with momentum)
+- **scikit-learn**: AUC score computation
+- **Matplotlib**: Training visualization
+- **Optax**: Optimization library for JAX
+- **ONNX**: Model export format (planned for future releases)
+- **torchvision**: Data loading (CIFAR-10)
