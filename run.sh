@@ -1,12 +1,21 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 # run.sh - setup and run a short training + plotting inside Colab
 # Usage in Colab after cloning your repo: `sh run.sh [REPO_DIR]`
 
 REPO_DIR=${1:-"repo"}
-echo "Using repo dir: $REPO_DIR"
 
-cd "$REPO_DIR"
+if [ -d "$REPO_DIR" ]; then
+  echo "Using repo dir: $REPO_DIR"
+  cd "$REPO_DIR"
+elif [ -f "requirements.txt" ] && [ -d "src" ]; then
+  echo "Repo dir '$REPO_DIR' not found; using current directory: $(pwd)"
+else
+  echo "Could not find repo directory '$REPO_DIR'."
+  echo "Run from /content with: sh repo/run.sh repo"
+  echo "Or run inside the repo with: sh run.sh"
+  exit 1
+fi
 
 echo "Upgrading pip..."
 python -m pip install --upgrade pip
