@@ -158,7 +158,7 @@ def main() -> None:
 
     out_path = Path(args.output_csv)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", "newline=""") as f:
+    with out_path.open("w", newline="") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=[
