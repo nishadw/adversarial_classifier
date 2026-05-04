@@ -75,18 +75,17 @@ def evaluate(model, loader, device):
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train CIFAR-10 (PyTorch)")
     p.add_argument("--mode", choices=["standard", "whitebox_pgd", "blackbox_pgd"], required=True)
-    p.add_argument("--data-root",            default="./data")
-    p.add_argument("--batch-size",  type=int, default=128)
-    p.add_argument("--epochs",      type=int, default=30)
-    p.add_argument("--lr",          type=float, default=0.1)
-    p.add_argument("--num-workers", type=int, default=0)
-    p.add_argument("--seed",        type=int, default=42)
-    p.add_argument("--pgd-eps",     type=float, default=8 / 255)
-    p.add_argument("--pgd-alpha",   type=float, default=2 / 255)
-    p.add_argument("--pgd-steps",   type=int, default=7)
+    p.add_argument("--data-root",    default="./data")
+    p.add_argument("--batch-size",   type=int,   default=128)
+    p.add_argument("--epochs",       type=int,   default=30)
+    p.add_argument("--lr",           type=float, default=0.1)
+    p.add_argument("--num-workers",  type=int,   default=0)
+    p.add_argument("--seed",         type=int,   default=42)
+    p.add_argument("--pgd-eps",      type=float, default=8 / 255)
+    p.add_argument("--pgd-alpha",    type=float, default=2 / 255)
+    p.add_argument("--pgd-steps",    type=int,   default=7)
     p.add_argument("--surrogate-checkpoint", default=None)
-    p.add_argument("--output",      required=True)
-    p.add_argument("--download",    action="store_true")
+    p.add_argument("--output",       required=True)
     return p.parse_args()
 
 
@@ -104,10 +103,10 @@ def main() -> None:
     print(f"Device: {device}")
 
     train_loader, val_loader, test_loader = build_cifar10_loaders(
-        args.data_root, args.batch_size, args.num_workers, download=args.download
+        args.data_root, args.batch_size, args.num_workers
     )
 
-    model = SimpleCNN().to(device)
+    model     = SimpleCNN().to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
 
     surrogate = None
@@ -136,8 +135,7 @@ def main() -> None:
                    test_loss=te_loss,  test_acc=te_acc,  test_auc=te_auc)
         history.append(row)
         print(f"Epoch {epoch:3d}/{args.epochs} | "
-              f"train={tr_acc*100:.1f}% loss={tr_loss:.4f} | "
-              f"val={vl_acc*100:.1f}% | test={te_acc*100:.1f}%")
+              f"train={tr_acc*100:.1f}% | val={vl_acc*100:.1f}% | test={te_acc*100:.1f}%")
 
         if te_acc > best_acc:
             best_acc = te_acc
@@ -150,7 +148,6 @@ def main() -> None:
         w.writerows(history)
 
     print(f"Best test acc: {best_acc*100:.2f}%  →  {out_path}")
-    print(f"History saved: {csv_path}")
 
 
 if __name__ == "__main__":

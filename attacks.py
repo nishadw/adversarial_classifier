@@ -16,7 +16,7 @@ def pgd_linf_attack(
 ) -> torch.Tensor:
     """Untargeted PGD L-inf adversarial examples.
 
-    Matches the original loss: -mean(sum(one_hot * softmax(logits))).
+    Expects images in normalised [-1, 1] space (mean=0.5, std=0.5).
     Saves/restores model.training so callers don't need to manage it.
     """
     was_training = model.training
@@ -24,7 +24,7 @@ def pgd_linf_attack(
 
     x = images.clone().detach()
     if random_start:
-        x = torch.clamp(x + torch.empty_like(x).uniform_(-epsilon, epsilon), 0.0, 1.0)
+        x = torch.clamp(x + torch.empty_like(x).uniform_(-epsilon, epsilon), -1.0, 1.0)
 
     original = images.clone().detach()
 
@@ -38,7 +38,7 @@ def pgd_linf_attack(
         with torch.no_grad():
             x = torch.clamp(
                 original + torch.clamp(x + alpha * x.grad.sign() - original, -epsilon, epsilon),
-                0.0, 1.0,
+                -1.0, 1.0,
             )
 
     if was_training:

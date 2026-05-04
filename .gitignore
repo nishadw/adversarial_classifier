@@ -1,1 +1,4 @@
 data/
+artifacts/
+run_executed.ipynb
+.venv/
