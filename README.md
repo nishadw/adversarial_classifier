@@ -1,144 +1,76 @@
 # adversarial_classifier
 
-Train and compare three CIFAR-10 classifiers using **JAX/Flax** for 50 epochs:
-- `standard` – Standard CNN trained on clean data
-- `whitebox_pgd_trained` – White-box PGD adversarial training
-- `blackbox_pgd_trained` – Transfer-based (black-box) PGD adversarial training
+**What adversarial training costs, measured.** Three CIFAR-10 classifiers trained under one
+harness — clean, white-box PGD adversarial training, and transfer-based black-box
+PGD against a surrogate — then evaluated against each other on clean and attacked
+data.
 
-Generates **per-epoch metrics** (train/val/test accuracy, loss, AUC) and **plots** for each model.
+The point is the comparison, not any single number: how much clean accuracy a
+defence gives up, and how much of a white-box defence survives when the adversary
+only has a surrogate to differentiate through.
 
-## Quick Start
+| Mode | Training data | Adversary at train time |
+|---|---|---|
+| `standard` | clean | none |
+| `whitebox_pgd` | clean + PGD examples from the model itself | full gradient access |
+| `blackbox_pgd` | clean + PGD examples from a frozen surrogate | surrogate gradients only |
 
-```bash
-# Setup
-cd /Users/nishad/1_Programming_Workspaces/adversarial_classifier
-python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .
+## The model and the attack
 
-# Run all training & comparison (50 epochs, then plots & final comparison)
-chmod +x run_all.sh
-./run_all.sh
-```
+A six-convolution CNN with GroupNorm (128 → 256 → 512) and a three-layer head,
+in PyTorch. The attack is untargeted PGD under an L∞ budget, with a random start
+inside the ball and the perturbation re-projected after every step. Defaults are
+ε = 8/255, α = 2/255, 7 steps, on images normalised to [−1, 1].
 
-**Outputs:**
-- `artifacts/standard.pt`, `artifacts/whitebox_pgd.pt`, `artifacts/blackbox_pgd.pt` – Trained models
-- `artifacts/*_history.csv` – Per-epoch metrics (epoch, train_loss, train_acc, val_loss, val_acc, val_auc, test_loss, test_acc, test_auc)
-- `artifacts/*_chart.png` – Training curves (train/val/test accuracy & loss)
-- `artifacts/comparison_final.csv` – Final robustness evaluation
+Both the training loss and the attack objective are computed on softmax
+probabilities rather than logits, so the attack maximises exactly the quantity
+training minimises.
 
-## Environment Variables
+| Path | What it is |
+|---|---|
+| `models.py` | `SimpleCNN` — the architecture all three modes share |
+| `attacks.py` | `pgd_linf_attack` — untargeted L∞ PGD, restores `model.training` on exit |
+| `data.py` | CIFAR-10 loaders, normalisation, train/val/test split |
+| `train.py` | The one entry point; `--mode` picks the regime |
+| `run.ipynb` | End-to-end run and the comparison plots |
 
-```bash
-EPOCHS=50      # Number of training epochs (default: 50)
-BATCH=128      # Batch size (default: 128)
-LR=0.1         # Learning rate (default: 0.1)
-NUM_WORKERS=0  # Data loader workers (default: 0)
-ARCHIVE=/path/to/cifar-10-python.tar  # CIFAR-10 archive
-```
+## Running it
 
-Example:
-```bash
-EPOCHS=50 BATCH=128 LR=0.1 ./run_all.sh
-```
-
-## Manual Training (Step by Step)
-
-### 1. Train standard model
+Python 3.10 or newer.
 
 ```bash
-python -m adversarial_classifier.train \
-  --mode standard \
-  --epochs 50 \
-  --batch-size 128 \
-  --lr 0.1 \
-  --archive-path /Users/nishad/Downloads/cifar-100-python.tar \
-  --download-if-missing \
-  --output ./artifacts/standard.pt
+python -m venv .venv && source .venv/bin/activate
+pip install -U pip && pip install -e .
 ```
 
-### 2. Train white-box PGD model
+Train the three models in order — the black-box run needs the standard model as
+its surrogate:
 
 ```bash
-python -m adversarial_classifier.train \
-  --mode whitebox_pgd \
-  --epochs 50 \
-  --batch-size 128 \
-  --lr 0.1 \
-  --pgd-steps 7 \
-  --archive-path /Users/nishad/Downloads/cifar-100-python.tar \
-  --download-if-missing \
-  --output ./artifacts/whitebox_pgd.pt
+python train.py --mode standard     --epochs 50 --output artifacts/standard.pt
+python train.py --mode whitebox_pgd --epochs 50 --output artifacts/whitebox_pgd.pt
+python train.py --mode blackbox_pgd --epochs 50 --output artifacts/blackbox_pgd.pt \
+  --surrogate-checkpoint artifacts/standard.pt
 ```
 
-### 3. Train black-box PGD model
+| Flag | Default | |
+|---|---|---|
+| `--mode` | required | `standard`, `whitebox_pgd`, `blackbox_pgd` |
+| `--output` | required | checkpoint path |
+| `--epochs` | 30 | |
+| `--batch-size` | 128 | |
+| `--lr` | 0.1 | |
+| `--pgd-eps` | 8/255 | L∞ budget |
+| `--pgd-alpha` | 2/255 | step size |
+| `--pgd-steps` | 7 | |
+| `--surrogate-checkpoint` | — | required for `blackbox_pgd` |
+| `--data-root` | `./data` | CIFAR-10 is downloaded here if absent |
+| `--seed` | 42 | |
 
-```bash
-python -m adversarial_classifier.train \
-  --mode blackbox_pgd \
-  --surrogate-checkpoint ./artifacts/standard.pt \
-  --epochs 50 \
-  --batch-size 128 \
-  --lr 0.1 \
-  --pgd-steps 7 \
-  --archive-path /Users/nishad/Downloads/cifar-100-python.tar \
-  --download-if-missing \
-  --output ./artifacts/blackbox_pgd.pt
-```
+Each run writes the checkpoint plus a per-epoch CSV beside it — train and
+validation loss, accuracy and AUC — which is what the notebook plots.
 
-### 4. Plot training results
+## Related
 
-```bash
-python -m adversarial_classifier.plot_results \
-  ./artifacts/standard_history.csv \
-  ./artifacts/whitebox_pgd_history.csv \
-  ./artifacts/blackbox_pgd_history.csv \
-  --output-dir ./artifacts
-```
-
-### 5. Compare models
-
-```bash
-python -m adversarial_classifier.compare_models \
-  --standard-ckpt ./artifacts/standard.pt \
-  --whitebox-ckpt ./artifacts/whitebox_pgd.pt \
-  --blackbox-ckpt ./artifacts/blackbox_pgd.pt \
-  --pgd-steps 20 \
-  --output-csv ./artifacts/comparison_final.csv
-```
-
-## Outputs Explained
-
-**Per-Epoch Metrics CSV** (`*_history.csv`):
-- `epoch`: Training epoch
-- `train_loss`, `train_acc`: Training loss & accuracy
-- `val_loss`, `val_acc`, `val_auc`: Validation metrics
-- `test_loss`, `test_acc`, `test_auc`: Test metrics
-
-**Training Charts** (`*_chart.png`):
-- Left subplot: Accuracy curves (train/val/test)
-- Right subplot: Loss curves (train/val/test)
-
-**Final Comparison** (`comparison_final.csv`):
-- `test_loss`, `test_acc`, `test_auc`: Model performance on clean test set
-- `whitebox_pgd_acc`: Robustness to attacks from the model itself
-- `transfer_pgd_acc_from_simple`: Robustness to transfer attacks from standard model
-
-## Architecture
-
-- **Input**: CIFAR-10 images (32×32, 3 channels)
-- **Conv blocks**: 128→256→512 channels with GroupNorm
-- **Pooling**: Max pooling (stride 2) after each block → 4×4×512
-- **Head**: Global average pooling → Dense(512) → Dense(256) → Dense(10)
-- **Target accuracy**: >90% on clean test set
-
-## Tech Stack
-
-- **JAX**: High-performance array operations
-- **Flax**: Neural networks on JAX
-- **Optax**: Optimization (SGD with momentum)
-- **scikit-learn**: AUC score computation
-- **Matplotlib**: Training visualization
-- **Optax**: Optimization library for JAX
-- **torchvision**: Data loading (CIFAR-10)
+Part of the same line of work as the adversarially hardened on-device vision
+cascade written up at [nishad.page/projects](https://www.nishad.page/projects#atak).
